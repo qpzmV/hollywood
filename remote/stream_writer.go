@@ -32,9 +32,11 @@ type streamWriter struct {
 	serializer  Serializer
 	tlsConfig   *tls.Config
 	buffSize    int
+	network     string
+	dialer      func(network, addr string) (net.Conn, error)
 }
 
-func newStreamWriter(e *actor.Engine, rpid *actor.PID, address string, tlsConfig *tls.Config, buffSize int) actor.Processer {
+func newStreamWriter(e *actor.Engine, rpid *actor.PID, address string, tlsConfig *tls.Config, buffSize int, network string, dialer func(network, addr string) (net.Conn, error)) actor.Processer {
 	return &streamWriter{
 		writeToAddr: address,
 		engine:      e,
@@ -44,6 +46,8 @@ func newStreamWriter(e *actor.Engine, rpid *actor.PID, address string, tlsConfig
 		serializer:  ProtoSerializer{},
 		tlsConfig:   tlsConfig,
 		buffSize:    buffSize,
+		network:     network,
+		dialer:      dialer,
 	}
 }
 
@@ -120,24 +124,22 @@ func (s *streamWriter) init() {
 	)
 	for i := 0; i < maxRetries; i++ {
 		// Here we try to connect to the remote address.
-		switch s.tlsConfig {
-		case nil:
-			rawconn, err = net.Dial("tcp", s.writeToAddr)
-			if err != nil {
-				d := time.Duration(delay * time.Duration(i*2))
-				slog.Error("net.Dial", "err", err, "remote", s.writeToAddr, "retry", i, "max", maxRetries, "delay", d)
-				time.Sleep(d)
-				continue
+		if s.dialer != nil {
+			rawconn, err = s.dialer(s.network, s.writeToAddr)
+		} else {
+			switch s.tlsConfig {
+			case nil:
+				rawconn, err = net.Dial(s.network, s.writeToAddr)
+			default:
+				slog.Debug("remote using TLS for writing")
+				rawconn, err = tls.Dial(s.network, s.writeToAddr, s.tlsConfig)
 			}
-		default:
-			slog.Debug("remote using TLS for writing")
-			rawconn, err = tls.Dial("tcp", s.writeToAddr, s.tlsConfig)
-			if err != nil {
-				d := time.Duration(delay * time.Duration(i*2))
-				slog.Error("tls.Dial", "err", err, "remote", s.writeToAddr, "retry", i, "max", maxRetries, "delay", d)
-				time.Sleep(d)
-				continue
-			}
+		}
+		if err != nil {
+			d := time.Duration(delay * time.Duration(i*2))
+			slog.Error("dialer failed", "err", err, "remote", s.writeToAddr, "retry", i, "max", maxRetries, "delay", d)
+			time.Sleep(d)
+			continue
 		}
 		break
 	}

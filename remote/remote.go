@@ -20,12 +20,19 @@ import (
 type Config struct {
 	TLSConfig *tls.Config
 	BuffSize  int
-	// Wg        *sync.WaitGroup
+	// Network is the network to listen on. Default is "tcp".
+	Network string
+	// Dialer is the function to dial a remote address. Default is net.Dial.
+	Dialer func(network, addr string) (net.Conn, error)
+	// Listener is an optional pre-initialized listener.
+	Listener net.Listener
 }
 
 // NewConfig returns a new default remote configuration.
 func NewConfig() Config {
-	return Config{}
+	return Config{
+		Network: "tcp",
+	}
 }
 
 // WithTLS sets the TLS config of the remote which will set
@@ -40,6 +47,24 @@ func (c Config) WithTLS(tlsconf *tls.Config) Config {
 // defined by drpc package
 func (c Config) WithBufferSize(size int) Config {
 	c.BuffSize = size
+	return c
+}
+
+// WithNetwork sets the network to listen on.
+func (c Config) WithNetwork(network string) Config {
+	c.Network = network
+	return c
+}
+
+// WithDialer sets the dialer used to connect to remote addresses.
+func (c Config) WithDialer(dialer func(network, addr string) (net.Conn, error)) Config {
+	c.Dialer = dialer
+	return c
+}
+
+// WithListener sets the listener used to accept incoming connections.
+func (c Config) WithListener(ln net.Listener) Config {
+	c.Listener = ln
 	return c
 }
 
@@ -78,15 +103,22 @@ func (r *Remote) Start(e *actor.Engine) error {
 	r.engine = e
 	var ln net.Listener
 	var err error
-	switch r.config.TLSConfig {
-	case nil:
-		ln, err = net.Listen("tcp", r.addr)
-	default:
-		slog.Debug("remote using TLS for listening")
-		ln, err = tls.Listen("tcp", r.addr, r.config.TLSConfig)
-	}
-	if err != nil {
-		return fmt.Errorf("remote failed to listen: %w", err)
+	if r.config.Listener != nil {
+		ln = r.config.Listener
+	} else {
+		if r.config.Network == "" {
+			r.config.Network = "tcp"
+		}
+		switch r.config.TLSConfig {
+		case nil:
+			ln, err = net.Listen(r.config.Network, r.addr)
+		default:
+			slog.Debug("remote using TLS for listening")
+			ln, err = tls.Listen(r.config.Network, r.addr, r.config.TLSConfig)
+		}
+		if err != nil {
+			return fmt.Errorf("remote failed to listen: %w", err)
+		}
 	}
 	slog.Debug("listening", "addr", r.addr)
 	mux := drpcmux.New()
@@ -103,7 +135,7 @@ func (r *Remote) Start(e *actor.Engine) error {
 	})
 
 	r.streamRouterPID = r.engine.Spawn(
-		newStreamRouter(r.engine, r.config.TLSConfig, r.config.BuffSize),
+		newStreamRouter(r.engine, r.config.TLSConfig, r.config.BuffSize, r.config.Network, r.config.Dialer),
 		"router", actor.WithInboxSize(1024*1024))
 	slog.Debug("server started", "listenAddr", r.addr)
 	r.stopWg = &sync.WaitGroup{}
