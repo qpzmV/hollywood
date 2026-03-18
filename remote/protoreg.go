@@ -2,6 +2,7 @@ package remote
 
 import (
 	"fmt"
+	"reflect"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -9,7 +10,20 @@ import (
 var registry = map[string]VTUnmarshaler{}
 
 func RegisterType(v VTUnmarshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			// If proto.MessageName panics (e.g. due to nil ProtoReflect), 
+			// we rely on the reflection fallback below.
+		}
+	}()
 	tname := string(proto.MessageName(v))
+	if tname == "" {
+		typ := reflect.TypeOf(v)
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+		tname = typ.Name()
+	}
 	registry[tname] = v
 }
 

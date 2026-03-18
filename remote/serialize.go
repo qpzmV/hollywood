@@ -1,6 +1,8 @@
 package remote
 
 import (
+	"reflect"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -74,7 +76,24 @@ func (ProtoSerializer) TypeName(msg any) string {
 type VTProtoSerializer struct{}
 
 func (VTProtoSerializer) TypeName(msg any) string {
-	return string(proto.MessageName(msg.(proto.Message)))
+	var tname string
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				tname = ""
+			}
+		}()
+		tname = string(proto.MessageName(msg.(proto.Message)))
+	}()
+
+	if tname == "" {
+		typ := reflect.TypeOf(msg)
+		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+		tname = typ.Name()
+	}
+	return tname
 }
 
 func (VTProtoSerializer) Serialize(msg any) ([]byte, error) {
