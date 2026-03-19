@@ -17,6 +17,7 @@ func RegisterType(v VTUnmarshaler) {
 			// we rely on the reflection fallback below.
 		}
 	}()
+	tname := string(proto.MessageName(v))
 	if tname == "" {
 		typ := reflect.TypeOf(v)
 		if typ.Kind() == reflect.Ptr {

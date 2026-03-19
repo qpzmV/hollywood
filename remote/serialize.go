@@ -1,9 +1,7 @@
-```go
 package remote
 
 import (
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"reflect"
 
@@ -112,12 +110,6 @@ func (ProtoSerializer) TypeName(msg any) string {
 	if tname == "" {
 		typ := reflect.TypeOf(msg)
 		if typ.Kind() == reflect.Ptr {
-			typ = typ.Elem()
-		}
-		tname = typ.Name()
-	}
-	return tname
-}
 			typ = typ.Elem()
 		}
 		tname = typ.Name()
