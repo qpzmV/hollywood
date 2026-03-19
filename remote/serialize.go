@@ -1,7 +1,7 @@
 package remote
 
 import (
-	"fmt"
+	"encoding/json"
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
@@ -61,15 +61,29 @@ func (ProtoSerializer) Serialize(msg any) ([]byte, error) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				err = fmt.Errorf("proto.Marshal panic: %v", r)
+				// Fallback to JSON if proto.Marshal panics
+				b, err = json.Marshal(msg)
 			}
 		}()
 		b, err = proto.Marshal(msg.(proto.Message))
+		if err != nil {
+			// Fallback to JSON if proto.Marshal errors
+			b, err = json.Marshal(msg)
+		}
 	}()
 	return b, err
 }
 
 func (ProtoSerializer) Deserialize(data []byte, tname string) (any, error) {
+	// 1. Try manual registry first (handles manual/JSON types)
+	v, err := registryGetType(tname)
+	if err == nil {
+		pm := reflect.New(reflect.TypeOf(v).Elem()).Interface()
+		err = json.Unmarshal(data, pm)
+		return pm, err
+	}
+
+	// 2. Fallback to standard Protobuf registry
 	pname := protoreflect.FullName(tname)
 	n, err := protoregistry.GlobalTypes.FindMessageByName(pname)
 	if err != nil {
@@ -130,15 +144,24 @@ func (VTProtoSerializer) Serialize(msg any) ([]byte, error) {
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
-				// Fallback to standard proto if MarshalVT is missing or panics
+				// Fallback to standard proto or JSON
 				if m, ok := msg.(proto.Message); ok {
 					b, err = proto.Marshal(m)
+					if err != nil {
+						b, err = json.Marshal(msg)
+					}
 				} else {
-					err = fmt.Errorf("VTMarshaler cast or MarshalVT panic: %v", r)
+					b, err = json.Marshal(msg)
 				}
 			}
 		}()
-		b, err = msg.(VTMarshaler).MarshalVT()
+		if vm, ok := msg.(VTMarshaler); ok {
+			b, err = vm.MarshalVT()
+		} else if pm, ok := msg.(proto.Message); ok {
+			b, err = proto.Marshal(pm)
+		} else {
+			b, err = json.Marshal(msg)
+		}
 	}()
 	return b, err
 }

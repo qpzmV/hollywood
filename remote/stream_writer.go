@@ -43,7 +43,7 @@ func newStreamWriter(e *actor.Engine, rpid *actor.PID, address string, tlsConfig
 		routerPID:   rpid,
 		inbox:       actor.NewInbox(streamWriterBatchSize),
 		pid:         actor.NewPID(e.Address(), "stream"+"/"+address),
-		serializer:  ProtoSerializer{},
+		serializer:  VTProtoSerializer{},
 		tlsConfig:   tlsConfig,
 		buffSize:    buffSize,
 		network:     network,
