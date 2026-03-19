@@ -2,6 +2,7 @@ package remote
 
 import (
 	"fmt"
+	"log/slog"
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
@@ -16,7 +17,6 @@ func RegisterType(v VTUnmarshaler) {
 			// we rely on the reflection fallback below.
 		}
 	}()
-	tname := string(proto.MessageName(v))
 	if tname == "" {
 		typ := reflect.TypeOf(v)
 		if typ.Kind() == reflect.Ptr {
@@ -24,6 +24,7 @@ func RegisterType(v VTUnmarshaler) {
 		}
 		tname = typ.Name()
 	}
+	slog.Info("registering type", "name", tname)
 	registry[tname] = v
 }
 

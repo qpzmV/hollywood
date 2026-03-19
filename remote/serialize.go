@@ -1,7 +1,10 @@
+```go
 package remote
 
 import (
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"reflect"
 
 	"google.golang.org/protobuf/proto"
@@ -82,6 +85,7 @@ func (ProtoSerializer) Deserialize(data []byte, tname string) (any, error) {
 		err = json.Unmarshal(data, pm)
 		return pm, err
 	}
+	slog.Info("registryGetType failed, falling back to proto", "tname", tname)
 
 	// 2. Fallback to standard Protobuf registry
 	pname := protoreflect.FullName(tname)
@@ -108,6 +112,12 @@ func (ProtoSerializer) TypeName(msg any) string {
 	if tname == "" {
 		typ := reflect.TypeOf(msg)
 		if typ.Kind() == reflect.Ptr {
+			typ = typ.Elem()
+		}
+		tname = typ.Name()
+	}
+	return tname
+}
 			typ = typ.Elem()
 		}
 		tname = typ.Name()
